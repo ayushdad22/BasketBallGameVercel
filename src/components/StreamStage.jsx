@@ -63,7 +63,9 @@ export default function StreamStage({
   const stageRef = useRef(null);
   const videoRef = useRef(null);
   const gameRef = useRef(null);
-  const [isFs, setIsFs] = useState(false);
+  const [nativeFs, setNativeFs] = useState(false);
+  const [fakeFs, setFakeFs] = useState(false);   // iPhone fallback (no Fullscreen API there)
+  const isFs = nativeFs || fakeFs;
   const [flash, setFlash] = useState(0);
   const [playerName, setPlayerName] = useState(null);
 
@@ -134,14 +136,48 @@ export default function StreamStage({
   const simulateBasket = () => window.dispatchEvent(new CustomEvent(VIDEO_BASKET_EVENT, { detail: { simulated: true } }));
   const simulateMake = () => window.dispatchEvent(new CustomEvent('jam-score-made'));
 
-  function toggleFullscreen() {
+  // Real fullscreen where the browser allows it (desktop, Android). iPhone
+  // Safari only lets <video> elements go fullscreen, not a page section, so
+  // there we fill the screen with CSS instead ("fake" fullscreen).
+  async function toggleFullscreen() {
     const el = stageRef.current;
-    const fs = document.fullscreenElement || document.webkitFullscreenElement;
-    if (fs) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    else (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) {
+      try { screen.orientation?.unlock?.(); } catch { /* not supported */ }
+      try { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch { /* already out */ }
+      return;
+    }
+    if (fakeFs) { setFakeFs(false); return; }
+
+    const request = el.requestFullscreen || el.webkitRequestFullscreen;
+    const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+    if (request && allowed) {
+      try {
+        await request.call(el, { navigationUI: 'hide' });
+        // phones: turn sideways like YouTube does (Android only; ignored elsewhere)
+        if (window.matchMedia('(pointer: coarse)').matches) {
+          try { await screen.orientation?.lock?.('landscape'); } catch { /* not allowed here */ }
+        }
+        return;
+      } catch { /* refused, e.g. inside another iframe: fall back below */ }
+    }
+    setFakeFs(true);
   }
+
+  // Fake fullscreen: stop the page behind from scrolling; Esc leaves it.
   useEffect(() => {
-    const onFs = () => setIsFs(!!(document.fullscreenElement || document.webkitFullscreenElement));
+    if (!fakeFs) return;
+    const root = document.documentElement;
+    const prev = root.style.overflow;
+    root.style.overflow = 'hidden';
+    window.scrollTo(0, 0);
+    const onKey = (e) => { if (e.key === 'Escape') setFakeFs(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { root.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+  }, [fakeFs]);
+
+  useEffect(() => {
+    const onFs = () => setNativeFs(!!(document.fullscreenElement || document.webkitFullscreenElement));
     document.addEventListener('fullscreenchange', onFs);
     document.addEventListener('webkitfullscreenchange', onFs);
     return () => {
@@ -151,7 +187,7 @@ export default function StreamStage({
   }, []);
 
   const shotLeft = Math.max(0, shot.endsAt - Date.now());
-  const cls = ['ss-stage', `lay-${layout}`, isFs && 'is-fs', fullBleed && 'full-bleed', shot.open && 'shot-open', !playerName && !tagMode && 'is-locked']
+  const cls = ['ss-stage', `lay-${layout}`, isFs && 'is-fs', fakeFs && 'fake-fs', fullBleed && 'full-bleed', shot.open && 'shot-open', !playerName && !tagMode && 'is-locked']
     .filter(Boolean).join(' ');
 
   return (
@@ -256,6 +292,9 @@ const POP_OUT = '380ms cubic-bezier(.55,0,1,.45)';
 const STAGE_CSS = `
 .ss-stage { position:relative; height:100%; min-height:0; box-sizing:border-box; container-type:inline-size; font-family:'Space Mono', monospace; }
 .ss-stage.is-locked { overflow:hidden !important; }
+/* iPhone "fullscreen": cover the whole screen, including over the page chrome we control */
+.ss-stage.fake-fs { position:fixed !important; inset:0; z-index:2147483000; width:100vw !important; height:100vh; height:100dvh; margin:0 !important; max-width:none !important;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); background:#0d0d0d; }
 .ss-stage *, .ss-stage *::before, .ss-stage *::after { box-sizing:border-box; }
 
 /* ── video ─────────────────────────────────────────────────────────────── */
@@ -322,8 +361,9 @@ const STAGE_CSS = `
 .lay-split .ss-video { grid-area:video; }
 .lay-split .ss-side { grid-area:slot; overflow-y:auto; border-left:4px solid ${C.black}; }
 .lay-split .ss-side .lb { min-height:100%; }
-.lay-split .ss-meta { grid-area:video; align-self:end; z-index:3; padding:28px 12px 10px; background:linear-gradient(transparent, rgba(13,13,13,.85)); pointer-events:none; }
-.lay-split .ss-meta > * { pointer-events:auto; }
+/* title sits at the TOP of the video here: the control bar is at the bottom */
+.lay-split .ss-meta { grid-area:video; align-self:start; z-index:3; padding:10px 12px 26px; background:linear-gradient(rgba(13,13,13,.85), transparent); pointer-events:none; }
+.lay-split .ss-actions { pointer-events:auto; }
 .lay-split .ss-title { color:${C.cream}; font-size:15px; }
 .lay-split .ss-channel { display:none; }
 /* split layouts (landscape phone, narrow window, fullscreen): compact leaderboard */

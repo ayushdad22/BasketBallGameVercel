@@ -63,6 +63,7 @@ export default function StreamStage({
   const stageRef = useRef(null);
   const videoRef = useRef(null);
   const gameRef = useRef(null);
+  const sideRef = useRef(null);
   const [nativeFs, setNativeFs] = useState(false);
   const [fakeFs, setFakeFs] = useState(false);   // iPhone fallback (no Fullscreen API there)
   const isFs = nativeFs || fakeFs;
@@ -164,6 +165,8 @@ export default function StreamStage({
     setFakeFs(true);
   }
 
+  useEffect(() => { if (!isFs && stageRef.current) stageRef.current.scrollTop = 0; }, [isFs]);
+
   // Fake fullscreen: stop the page behind from scrolling; Esc leaves it.
   useEffect(() => {
     if (!fakeFs) return;
@@ -248,7 +251,15 @@ export default function StreamStage({
           </div>
         </div>
 
-        <aside className="ss-side">
+        {/* fullscreen: small card that holds the game's spot between baskets */}
+        {isFs && league && (
+          <SlotCard
+            league={league} pending={pending} feed={feed} finished={finished}
+            onShowBoard={() => sideRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          />
+        )}
+
+        <aside className="ss-side" ref={sideRef}>
           <Leaderboard
             league={league} pending={pending} feed={feed} shot={shot} toast={toast}
             onLeave={() => setPlayerName(null)}
@@ -269,6 +280,25 @@ export default function StreamStage({
       )}
 
       <style>{STAGE_CSS + LEADERBOARD_CSS + NAME_ENTRY_CSS + CUE_TAGGER_CSS + VIDEO_PLAYER_CSS}</style>
+    </div>
+  );
+}
+
+// Sits in the game's column in fullscreen while no shot is open.
+function SlotCard({ league, pending, feed, finished, onShowBoard }) {
+  const me = league.ranked.find((p) => p.isPlayer);
+  const last = feed[0];
+  return (
+    <div className="ss-slotcard">
+      <div className="ss-slot-rank">#{me.rank}<small>/{league.ranked.length}</small></div>
+      <div className="ss-slot-pts">{me.score} pts{pending > 0 && <b>+{pending}</b>}</div>
+      <div className="ss-slot-next">
+        {finished ? 'Match over. Final standings below.' : 'The game pops in here when a basket drops in the video.'}
+      </div>
+      {last && !finished && (
+        <div className="ss-slot-feed" key={last.key}>{last.isPlayer ? 'You' : last.name} +{last.gain}</div>
+      )}
+      <button type="button" className="ss-slot-btn" onClick={onShowBoard}>Leaderboard ↓</button>
     </div>
   );
 }
@@ -408,16 +438,44 @@ const STAGE_CSS = `
 .lay-split .lb-avatar { width:26px; height:26px; font-size:12px; }
 
 /* ── FULLSCREEN: biggest uncropped video; leaderboard + game get what's left ── */
-.lay-split.is-fs { border:0; }
+/* ── FULLSCREEN: video 80 | game 20 fills the screen; leaderboard below (scroll) ── */
+.lay-split.is-fs {
+  border:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain;
+  grid-template-columns:minmax(0,4fr) minmax(180px,1fr);
+  grid-template-rows:100% auto;
+  grid-template-areas:"video slot" "board board";
+}
+.lay-split.is-fs.shot-open { grid-template-columns:minmax(0,4fr) minmax(180px,1fr); }
+.lay-split.is-fs .ss-side { grid-area:board; overflow:visible; border-left:0; border-top:4px solid ${C.orange}; background:${C.black}; }
+.lay-split.is-fs .ss-side .lb { max-width:760px; margin:0 auto; padding:16px 18px 24px !important; }
+/* full-size leaderboard again down there */
+.lay-split.is-fs .lb-status, .lay-split.is-fs .lb-leave { display:flex !important; }
+.lay-split.is-fs .lb-leave { display:block !important; }
+.lay-split.is-fs .lb-toast-slot { position:static; min-height:40px; }
+.lay-split.is-fs .lb-chip { display:inline-flex !important; }
+.lay-split.is-fs .lb-row { grid-template-columns:34px 30px 1fr 3em auto; gap:10px; padding:6px 12px; font-size:15px; }
+.lay-split.is-fs .lb-avatar { width:30px; height:30px; font-size:14px; }
+.lay-split.is-fs .lb-pts { font-size:17px; }
+.lay-split.is-fs .ss-slotcard { display:flex; }
 .lay-split.is-fs .ss-meta { display:none; }
 .lay-split.is-fs .ss-video-el { object-fit:contain; }
-.lay-split.is-fs .ss-side { border-left:3px solid ${C.black}; }
 .lay-split.is-fs .ss-game-head { padding:8px 10px; }
 .lay-split.is-fs .ss-shot-label { font-size:13px; }
-.lay-split.is-fs .ss-banner { font-size:26px; }
+.lay-split.is-fs .ss-banner { font-size:24px; top:34%; }
 .lay-split.is-fs .lb-name { font-size:14px; }
 /* fullscreen top 50: scrolls inside the right column */
-.lay-split.is-fs .ss-side { scroll-behavior:smooth; }
+.lay-split.is-fs { scroll-behavior:smooth; }
+.ss-slotcard { display:none; grid-area:slot; flex-direction:column; gap:10px; padding:14px 12px; background:${C.black}; color:${C.cream}; border-left:3px solid ${C.orange}; font-family:'Space Mono', monospace; overflow:hidden; }
+.ss-slot-rank { font:400 34px/1 'Archivo Black', sans-serif; color:${C.gold}; }
+.ss-slot-rank small { font:700 13px 'Space Mono', monospace; color:${C.cream}; opacity:.7; }
+.ss-slot-pts { font:400 18px 'Archivo Black', sans-serif; }
+.ss-slot-pts b { margin-left:6px; font:700 12px 'Space Mono', monospace; color:${C.gold}; }
+.ss-slot-next { font-size:12px; line-height:1.4; opacity:.8; }
+.ss-slot-feed { font-size:12px; color:${C.gold}; min-height:1.4em; animation:lb-in .3s ease-out; }
+.ss-slot-btn { margin-top:auto; font:400 13px 'Archivo Black', sans-serif; padding:9px 10px; color:${C.black}; background:${C.gold}; border:2px solid ${C.black}; box-shadow:3px 3px 0 ${C.orange}; cursor:pointer; }
+.ss-slot-btn:active { transform:translate(2px,2px); box-shadow:1px 1px 0 ${C.orange}; }
+.ss-slot-btn:focus-visible { outline:2px solid ${C.cream}; outline-offset:2px; }
+@media (max-height: 420px) { .ss-slot-rank { font-size:28px; } .ss-slotcard { gap:6px; padding:10px; } }
 .lay-split .ss-meta-row { margin-top:6px; }
 .lay-split .ss-game { grid-area:slot; z-index:4; transform:translateX(110%); transition:transform ${POP_OUT}; }
 .lay-split.shot-open .ss-game { transform:none; transition:transform ${POP_IN}; }

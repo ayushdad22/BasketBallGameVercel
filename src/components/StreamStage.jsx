@@ -8,7 +8,7 @@ import { useDemoVideo } from '../lib/useDemoVideo.js';
 import { demoFromLocation } from '../lib/demoVideo.js';
 import CueTagger, { CUE_TAGGER_CSS } from './CueTagger.jsx';
 import { Basketball } from './icons.jsx';
-import VideoPlayer, { VIDEO_PLAYER_CSS, VP_BAR_H } from './VideoPlayer.jsx';
+import VideoPlayer, { VIDEO_PLAYER_CSS } from './VideoPlayer.jsx';
 
 /**
  * StreamStage
@@ -276,7 +276,6 @@ export default function StreamStage({
 const C = { cream: '#f3d6a4', orange: '#ff6a00', black: '#0d0d0d', brown: '#3b2a1a', gold: '#d6b25e' };
 const GAME_SHARE = 35;          // % of the player the game takes while it's in
 const STRIP_H = '52px';
-const FS_SIDE_MIN = 280;       // fullscreen leaderboard/game column never narrower than this
 
 // Desktop sizing copied from YouTube's default (non-theater) watch page:
 // the player fills the main column and is as tall as the window allows, leaving
@@ -290,6 +289,9 @@ const POP_IN = '560ms cubic-bezier(.34,1.56,.64,1)';   // overshoot = "pop"
 const POP_OUT = '380ms cubic-bezier(.55,0,1,.45)';
 
 const STAGE_CSS = `
+/* control bar height: slimmer on short (sideways phone) screens */
+.ss-stage { --vp-bar-h:66px; }
+@media (max-height: 500px) { .ss-stage { --vp-bar-h:46px; } }
 .ss-stage { position:relative; height:100%; min-height:0; box-sizing:border-box; container-type:inline-size; font-family:'Space Mono', monospace; }
 .ss-stage.is-locked { overflow:hidden !important; }
 /* iPhone "fullscreen": cover the whole screen, including over the page chrome we control */
@@ -343,7 +345,7 @@ const STAGE_CSS = `
 .lay-desktop { overflow-y:auto; background:${C.cream}; padding:${YT_MARGIN}px ${YT_MARGIN}px 0; }
 .lay-desktop .ss-body { display:contents; }
 .lay-desktop.full-bleed { --ss-vw:calc(100vw - var(--ss-sbw, 0px)); width:var(--ss-vw); max-width:none; margin-left:calc(50% - var(--ss-vw) / 2); }
-.lay-desktop { display:grid; grid-template-columns:minmax(0, calc((100svh - ${YT_MASTHEAD}px - ${YT_MARGIN}px - ${YT_SPACE_BELOW}px - ${VP_BAR_H}px) * 16 / 9)) minmax(${YT_SIDE_MIN}px, ${YT_SIDE}px); justify-content:center; grid-template-rows:auto auto 1fr; grid-template-areas:"player side" "meta side" "loader side"; column-gap:${YT_MARGIN}px; align-content:start; }
+.lay-desktop { display:grid; grid-template-columns:minmax(0, calc((100svh - ${YT_MASTHEAD}px - ${YT_MARGIN}px - ${YT_SPACE_BELOW}px - var(--vp-bar-h)) * 16 / 9)) minmax(${YT_SIDE_MIN}px, ${YT_SIDE}px); justify-content:center; grid-template-rows:auto auto 1fr; grid-template-areas:"player side" "meta side" "loader side"; column-gap:${YT_MARGIN}px; align-content:start; }
 .lay-desktop .ss-player { grid-area:player; display:flex; width:100%; background:${C.black}; container-type:inline-size; }
 /* the frame keeps the full-width 16:9 height even while the game squeezes the video */
 .lay-desktop .vp { position:relative; inset:auto; }
@@ -356,10 +358,33 @@ const STAGE_CSS = `
 .lay-desktop .ss-side { grid-area:side; align-self:start; position:sticky; top:0; }
 
 /* ══ SPLIT: landscape phone / fullscreen ══════════════════════════════════ */
-.lay-split { display:grid; grid-template-columns:minmax(0,65fr) minmax(260px,35fr); grid-template-rows:minmax(0,1fr); grid-template-areas:"video slot"; overflow:hidden; background:${C.black}; border:4px solid ${C.black}; }
+/* Video first: the video gets the biggest 16:9 size the height allows; the
+   leaderboard takes what's left (180–300px). When a basket opens the game,
+   its column widens and the video shrinks for those few seconds. */
+.lay-split {
+  --side-w: max(clamp(180px, 22vw, 300px), calc(100cqw - (100dvh - var(--vp-bar-h)) * 16 / 9));
+  --game-w: clamp(260px, 40vw, 520px);
+  grid-template-columns:minmax(0,1fr) var(--side-w);
+  transition:grid-template-columns 380ms cubic-bezier(.4,0,.2,1);
+}
+.lay-split.shot-open { grid-template-columns:minmax(0,1fr) max(var(--side-w), var(--game-w)); transition:grid-template-columns 480ms cubic-bezier(.2,.8,.2,1); }
+.lay-split { display:grid; grid-template-rows:minmax(0,1fr); grid-template-areas:"video slot"; overflow:hidden; background:${C.black}; border:4px solid ${C.black}; }
 .lay-split .ss-player, .lay-split .ss-body { display:contents; }
 .lay-split .ss-video { grid-area:video; }
-.lay-split .ss-side { grid-area:slot; overflow-y:auto; border-left:4px solid ${C.black}; }
+.lay-split .ss-side { grid-area:slot; overflow-y:auto; border-left:4px solid ${C.black}; container-type:inline-size; }
+/* narrow leaderboard column: rank, name, points only */
+@container (max-width: 250px) {
+  .lb { padding:8px 8px !important; }
+  .lb-title { font-size:15px !important; gap:6px !important; }
+  .lb-title .icon { width:18px; height:18px; }
+  .lb-row { grid-template-columns:24px 1fr auto !important; gap:6px !important; padding:4px 6px !important; font-size:13px !important; }
+  .lb-avatar, .lb-delta, .lb-tagyou, .lb-name .ic-crown { display:none !important; }
+  .lb-rank .icon { width:20px !important; height:20px !important; }
+  .lb-pts { font-size:14px !important; min-width:0 !important; }
+  .lb-row.is-me { margin:4px 2px 5px !important; }
+  .lb-chip-live { font-size:10px !important; padding:2px 6px !important; }
+  .lb-toast { font-size:12px !important; padding:5px 8px !important; }
+}
 .lay-split .ss-side .lb { min-height:100%; }
 /* title sits at the TOP of the video here: the control bar is at the bottom */
 .lay-split .ss-meta { grid-area:video; align-self:start; z-index:3; padding:10px 12px 26px; background:linear-gradient(rgba(13,13,13,.85), transparent); pointer-events:none; }
@@ -383,7 +408,7 @@ const STAGE_CSS = `
 .lay-split .lb-avatar { width:26px; height:26px; font-size:12px; }
 
 /* ── FULLSCREEN: biggest uncropped video; leaderboard + game get what's left ── */
-.lay-split.is-fs { grid-template-columns:minmax(0,1fr) max(${FS_SIDE_MIN}px, calc(100vw - (100vh - ${VP_BAR_H}px) * 16 / 9)); border:0; }
+.lay-split.is-fs { border:0; }
 .lay-split.is-fs .ss-meta { display:none; }
 .lay-split.is-fs .ss-video-el { object-fit:contain; }
 .lay-split.is-fs .ss-side { border-left:3px solid ${C.black}; }
@@ -400,14 +425,14 @@ const STAGE_CSS = `
 /* ══ PORTRAIT: YouTube mobile ═════════════════════════════════════════════ */
 .lay-portrait { display:flex; flex-direction:column; overflow:hidden; background:${C.cream}; }
 .lay-portrait .ss-player { flex:none; }
-.lay-portrait .ss-video { width:100%; height:calc(56.25cqw + ${VP_BAR_H}px); }
+.lay-portrait .ss-video { width:100%; height:calc(56.25cqw + var(--vp-bar-h)); }
 .lay-portrait .ss-video-el { object-fit:cover; }
 .lay-portrait .ss-vtop { top:8px; right:8px; }
 .lay-portrait .ss-strip { display:block; flex:none; }
 .lay-portrait .ss-body { flex:1; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; }
 .lay-portrait .ss-meta { padding:12px; }
 .lay-portrait .ss-title { font-size:19px; }
-.lay-portrait .ss-game { position:absolute; left:0; right:0; bottom:0; top:calc(56.25cqw + ${VP_BAR_H}px + ${STRIP_H}); z-index:8; transform:translateX(110%); transition:transform ${POP_OUT}; }
+.lay-portrait .ss-game { position:absolute; left:0; right:0; bottom:0; top:calc(56.25cqw + var(--vp-bar-h) + ${STRIP_H}); z-index:8; transform:translateX(110%); transition:transform ${POP_OUT}; }
 .lay-portrait.shot-open .ss-game { transform:none; transition:transform ${POP_IN}; }
 .lay-portrait .ss-game-layer { border-left:0; border-top:3px solid ${C.black}; }
 

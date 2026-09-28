@@ -321,10 +321,10 @@ export const VIDEO_PLAYER_CSS = `
 .vp-frame iframe { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; }
 .vp-frame.is-locked iframe { pointer-events:none; }   /* tag mode: keep keyboard focus on the page */
 
-.vp-error { position:absolute; inset:0 0 ${VP_BAR_H}px; z-index:2; display:flex; flex-direction:column; gap:8px; align-items:center; justify-content:center; padding:16px; text-align:center; background:${C.brown}; color:${C.cream}; font-size:13px; }
+.vp-error { position:absolute; inset:0 0 var(--vp-bar-h, 66px); z-index:2; display:flex; flex-direction:column; gap:8px; align-items:center; justify-content:center; padding:16px; text-align:center; background:${C.brown}; color:${C.cream}; font-size:13px; }
 .vp-error strong { font:400 16px 'Archivo Black', sans-serif; color:${C.orange}; }
 
-.vp-bar { flex:none; height:${VP_BAR_H}px; box-sizing:border-box; padding:4px 10px 0; background:${C.black}; border-top:3px solid ${C.orange}; }
+.vp-bar { flex:none; height:var(--vp-bar-h, 66px); box-sizing:border-box; padding:4px 10px 0; background:${C.black}; border-top:3px solid ${C.orange}; }
 
 .vp-seek { position:relative; height:16px; display:flex; align-items:center; cursor:pointer; touch-action:none; }
 .vp-track { position:relative; width:100%; height:5px; background:#2a2118; transition:height .15s; }
@@ -363,6 +363,18 @@ export const VIDEO_PLAYER_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .vp-sound-off, .vp-live-dot { animation:none; }
   .vp-track, .vp-thumb { transition:none; }
+}
+/* sideways phones: slimmer bar so the picture gets the height */
+@media (max-height: 500px) {
+  .vp-bar { padding:2px 8px 0; border-top-width:2px; }
+  .vp-seek { height:12px; }
+  .vp-row { height:28px; gap:4px; }
+  .vp-btn { min-width:30px; height:28px; }
+  .vp-btn .icon { width:18px; height:18px; }
+  .vp-sound-off { padding:0 8px; }
+  .vp-sound-label { font-size:11px; }
+  .vp-time { font-size:11px; }
+  .vp-live { padding:1px 6px; font-size:10px; }
 }
 @media (max-width: 480px) {
   .vp-bar { padding:2px 6px 0; }

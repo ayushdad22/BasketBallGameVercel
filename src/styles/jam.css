@@ -1,0 +1,13 @@
+/* Global styles only. Everything else is styled inside the components. */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: #f3d6a4;
+  color: #0d0d0d;
+  font-family: 'Space Mono', ui-monospace, monospace;
+}
+
+/* Full-window stage; dvh keeps phones from hiding the bottom under the URL bar */
+.app { height: 100vh; height: 100dvh; }
